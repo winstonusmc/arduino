@@ -1,0 +1,143 @@
+#include <SPI.h>
+#include "mcp_can.h"
+#include <LiquidCrystal.h>
+
+LiquidCrystal lcd(9, 8, 7, 6, 5, 4);
+
+
+//raw readings
+int seconds = 0;
+int pw1 = 0;
+int pw2 = 0;
+int rpm = 0;
+
+int adv = 0;
+float afrtgt1 = 0.0;
+
+float baro = 0;
+float MAP = 0;
+float mat = 0;
+float clt = 0;
+
+int tps = 0;
+float bat = 1;
+float afr1 = 1;
+int cel_status = 0;
+
+unsigned long previousMillis = 0;
+
+
+unsigned char Flag_Recv = 0;
+unsigned char len = 0;
+unsigned char buf[8];
+INT32U canId = 0x000;
+char str[20];
+
+
+MCP_CAN CAN(10);                                            // Set CS to pin 10
+
+void setup()
+{
+    Serial.begin(115200);
+    
+    lcd.begin(16, 2);
+    lcd.setCursor(0,0);
+    lcd.print("MAP ");
+    lcd.setCursor(6,0);
+    lcd.print("AFR");
+    CAN.begin(CAN_500KBPS);                       // init can bus : baudrate = 500k
+    CAN.init_Mask(0,0,0x7ff);                      
+    CAN.init_Mask(1,0,0x7ff);                      
+    CAN.init_Filt(0,0,0x5f0);                      
+    CAN.init_Filt(1,0,0x5f2);                      
+    //CAN.init_Filt(2,0,0x5f3);                    
+    //CAN.init_Filt(3,0,0x0);                      
+    //CAN.init_Filt(4,0,0x0);                      
+    //CAN.init_Filt(5,0,0x0);                   
+
+}
+
+
+void loop() {
+  canRead();
+  //rpmSmoothing();
+  canDisplay();
+}   
+
+void canRead() {
+  if(CAN_MSGAVAIL == CAN.checkReceive()) {         // check if data coming
+    CAN.readMsgBuf(&len, buf);    // read data,  len: data length, buf: data buf
+    //canId = CAN.getCanId();
+    switch (CAN.getCanId()) {
+    case 0x5f0:
+      seconds = word(buf[0] , buf[1]);
+      pw1 = word(buf[2] , buf[3]);
+      pw2 = word(buf[4] , buf[5]);
+      rpm = word(buf[6] , buf[7]);
+      break; 
+    
+    case 0x5f1:  // Group 1 
+      adv = word(buf[0] , buf[1]);
+      afrtgt1 = buf[4];
+      //mat = word(buf[4] , buf[5]);
+      //clt = word(buf[6] , buf[7]);
+      break;
+      
+    case 0x5f2:  // Group 2 
+      baro = word(buf[0] , buf[1]);
+      MAP = word(buf[2] , buf[3]);
+      mat = word(buf[4] , buf[5]);
+      clt = word(buf[6] , buf[7]);
+      break;
+    
+    case 0x5f3:   // Group 3 
+      tps = ((buf[0] * 256) + buf[1]);
+      bat = ((buf[2] * 256) + buf[3]);
+      afr1 = ((buf[4] * 256) + buf[5]);
+      //afr2 = (((buf[6] *256) + buf[7]); 
+      break;
+    }    
+  }        
+}
+
+
+void canDisplay() {
+
+  const int interval = 50;
+  unsigned long currentMillis = millis();
+  //refresh rate
+  if (currentMillis - previousMillis >= interval) { //if time elapsed is greater than the signal interval
+    previousMillis = currentMillis; //then reset time
+    //lcd.rightToLeft();
+    lcd.setCursor (0,1);
+    lcd.print((MAP/10), 1);
+
+    lcd.setCursor (6,1);
+    lcd.print(afr1/10, 1);
+    lcd.setCursor (10,1);
+    lcd.print("/1");
+
+  
+
+    Serial.print(" Snds ");
+    Serial.print(seconds);
+    Serial.print(" RPM ");
+    Serial.print(rpm);
+    Serial.print(" PW1 ");
+    Serial.print(pw1/1000, 2);
+    Serial.print(" ADV ");
+    Serial.print(adv/10, 1);
+    Serial.print(" AFRtgt ");
+    Serial.print(afrtgt1/10, 1);
+    Serial.print(" AFR ");
+    Serial.print(afr1/10, 1);
+    Serial.print(" MAP ");
+    Serial.print(MAP/10, 1);
+    Serial.print(" CLT ");
+    Serial.print(clt/10, 1);
+    Serial.print(" TPS ");
+    Serial.print(tps/10);
+    Serial.println(" ");
+  
+  }
+}
